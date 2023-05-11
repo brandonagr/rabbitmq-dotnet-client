@@ -119,8 +119,8 @@ namespace RabbitMQ.Client.Unit
 
             await Task.WhenAll(ts);
             Assert.Null(nse);
-            uint c = await _channel.QueueDeleteAsync(q);
-            Assert.Equal(1, c);
+            uint c = await _channel.QueueDeleteAsync(q, false, false);
+            Assert.Equal((uint)0, c);
         }
     }
 }

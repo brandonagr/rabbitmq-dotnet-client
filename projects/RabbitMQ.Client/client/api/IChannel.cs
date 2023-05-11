@@ -293,6 +293,13 @@ namespace RabbitMQ.Client
         /// </remarks>
         void ExchangeDeclare(string exchange, string type, bool durable, bool autoDelete, IDictionary<string, object> arguments);
 
+        /// <summary>Asynchronously declare an exchange.</summary>
+        /// <remarks>
+        /// The exchange is declared non-passive and non-internal.
+        /// The "nowait" option is not exercised.
+        /// </remarks>
+        ValueTask ExchangeDeclareAsync(string exchange, string type, bool durable, bool autoDelete, IDictionary<string, object> arguments);
+
         /// <summary>
         /// Same as ExchangeDeclare but sets nowait to true and returns void (as there
         /// will be no response from the server).
@@ -314,6 +321,11 @@ namespace RabbitMQ.Client
         /// Delete an exchange.
         /// </summary>
         void ExchangeDelete(string exchange, bool ifUnused);
+
+        /// <summary>
+        /// Asynchronously delete an exchange.
+        /// </summary>
+        ValueTask ExchangeDeleteAsync(string exchange, bool ifUnused);
 
         /// <summary>
         /// Like ExchangeDelete but sets nowait to true.
@@ -417,6 +429,14 @@ namespace RabbitMQ.Client
         ///Returns the number of messages purged during queue deletion.
         /// </remarks>
         uint QueueDelete(string queue, bool ifUnused, bool ifEmpty);
+
+        /// <summary>
+        /// Asynchronously delete a queue.
+        /// </summary>
+        /// <remarks>
+        ///Returns the number of messages purged during queue deletion.
+        /// </remarks>
+        ValueTask<uint> QueueDeleteAsync(string queue, bool ifUnused, bool ifEmpty);
 
         /// <summary>
         ///Same as QueueDelete but sets nowait parameter to true

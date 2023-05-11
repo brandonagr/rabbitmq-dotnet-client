@@ -112,7 +112,7 @@ namespace RabbitMQ.Client.Unit
 
             await Task.WhenAll(ts);
             Assert.Null(nse);
-            await _channel.ExchangeDeleteAsync(x);
+            await _channel.ExchangeDeleteAsync(x, false);
         }
     }
 }
