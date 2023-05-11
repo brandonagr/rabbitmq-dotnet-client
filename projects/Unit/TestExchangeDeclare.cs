@@ -32,7 +32,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
-
+using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -80,6 +80,39 @@ namespace RabbitMQ.Client.Unit
 
             Assert.Null(nse);
             _channel.ExchangeDelete(x);
+        }
+
+        [Fact]
+        public async void TestConcurrentExchangeDeclareAsync()
+        {
+            string x = GenerateExchangeName();
+            var rnd = new Random();
+
+            var ts = new List<Task>();
+            NotSupportedException nse = null;
+            for (int i = 0; i < 256; i++)
+            {
+                async Task f()
+                {
+                    try
+                    {
+                        // sleep for a random amount of time to increase the chances
+                        // of thread interleaving. MK.
+                        await Task.Delay(rnd.Next(5, 50));
+                        await _channel.ExchangeDeclareAsync(x, "fanout", false, false, null);
+                    }
+                    catch (NotSupportedException e)
+                    {
+                        nse = e;
+                    }
+                }
+                var t = Task.Run(f);
+                ts.Add(t);
+            }
+
+            await Task.WhenAll(ts);
+            Assert.Null(nse);
+            await _channel.ExchangeDeleteAsync(x);
         }
     }
 }
