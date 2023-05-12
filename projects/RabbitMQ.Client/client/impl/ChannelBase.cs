@@ -469,7 +469,7 @@ namespace RabbitMQ.Client.Impl
 
         internal bool SetCloseReason(ShutdownEventArgs reason)
         {
-            return System.Threading.Interlocked.CompareExchange(ref _closeReason, reason, null) is null;
+            return Interlocked.CompareExchange(ref _closeReason, reason, null) is null;
         }
 
         public override string ToString()
@@ -1354,113 +1354,6 @@ namespace RabbitMQ.Client.Impl
             finally
             {
                 _rpcSemaphore.Release();
-            }
-        }
-
-        private class BasicConsumerRpcContinuation : SimpleBlockingRpcContinuation
-        {
-            public IBasicConsumer m_consumer;
-            public string m_consumerTag;
-        }
-
-        private class BasicGetRpcContinuation : SimpleBlockingRpcContinuation
-        {
-            public BasicGetResult m_result;
-        }
-
-        private class QueueDeclareRpcContinuation : SimpleBlockingRpcContinuation
-        {
-            public QueueDeclareOk m_result;
-        }
-
-        private class ExchangeDeclareAsyncRpcContinuation : AsyncRpcContinuation<bool>
-        {
-            public override void HandleCommand(in IncomingCommand cmd)
-            {
-                try
-                {
-                    if (cmd.CommandId == ProtocolCommandId.ExchangeDeclareOk)
-                    {
-                        _tcs.TrySetResult(true);
-                    }
-                    else
-                    {
-                        _tcs.SetException(new InvalidOperationException($"Received unexpected command of type {cmd.CommandId}!"));
-                    }
-                }
-                finally
-                {
-                    cmd.ReturnMethodBuffer();
-                }
-            }
-        }
-
-        private class ExchangeDeleteAsyncRpcContinuation : AsyncRpcContinuation<bool>
-        {
-            public override void HandleCommand(in IncomingCommand cmd)
-            {
-                try
-                {
-                    if (cmd.CommandId == ProtocolCommandId.ExchangeDeleteOk)
-                    {
-                        _tcs.TrySetResult(true);
-                    }
-                    else
-                    {
-                        _tcs.SetException(new InvalidOperationException($"Received unexpected command of type {cmd.CommandId}!"));
-                    }
-                }
-                finally
-                {
-                    cmd.ReturnMethodBuffer();
-                }
-            }
-        }
-
-        private class QueueDeclareAsyncRpcContinuation : AsyncRpcContinuation<QueueDeclareOk>
-        {
-            public override void HandleCommand(in IncomingCommand cmd)
-            {
-                try
-                {
-                    var method = new Client.Framing.Impl.QueueDeclareOk(cmd.MethodBytes.Span);
-                    var result = new QueueDeclareOk(method._queue, method._messageCount, method._consumerCount);
-                    if (cmd.CommandId == ProtocolCommandId.QueueDeclareOk)
-                    {
-                        _tcs.TrySetResult(result);
-                    }
-                    else
-                    {
-                        _tcs.SetException(new InvalidOperationException($"Received unexpected command of type {cmd.CommandId}!"));
-                    }
-                }
-                finally
-                {
-                    cmd.ReturnMethodBuffer();
-                }
-            }
-        }
-
-        private class QueueDeleteAsyncRpcContinuation : AsyncRpcContinuation<QueueDeleteOk>
-        {
-            public override void HandleCommand(in IncomingCommand cmd)
-            {
-                try
-                {
-                    var result = new Client.Framing.Impl.QueueDeleteOk(cmd.MethodBytes.Span);
-                    if (cmd.CommandId == ProtocolCommandId.QueueDeleteOk)
-                    {
-                        _tcs.TrySetResult(result);
-                    }
-                    else
-                    {
-                        _tcs.SetException(new InvalidOperationException($"Received unexpected command of type {cmd.CommandId}!"));
-                    }
-                }
-                finally
-                {
-                    cmd.ReturnMethodBuffer();
-                }
             }
         }
     }

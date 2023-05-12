@@ -1,4 +1,4 @@
-// This source code is dual-licensed under the Apache License, version
+﻿// This source code is dual-licensed under the Apache License, version
 // 2.0, and the Mozilla Public License, version 2.0.
 //
 // The APL v2.0:
@@ -35,7 +35,6 @@ using System.Threading.Tasks;
 using RabbitMQ.Client.client.framing;
 using RabbitMQ.Client.Exceptions;
 using RabbitMQ.Client.Framing.Impl;
-using RabbitMQ.Util;
 
 namespace RabbitMQ.Client.Impl
 {
@@ -81,44 +80,93 @@ namespace RabbitMQ.Client.Impl
         }
     }
 
-    internal class SimpleBlockingRpcContinuation : IRpcContinuation
+    internal class SimpleAsyncRpcContinuation : AsyncRpcContinuation<bool>
     {
-        private readonly BlockingCell<Either<IncomingCommand, ShutdownEventArgs>> m_cell = new BlockingCell<Either<IncomingCommand, ShutdownEventArgs>>();
+        private readonly ProtocolCommandId _expectedCommandId;
 
-        public void GetReply(TimeSpan timeout)
+        public SimpleAsyncRpcContinuation(ProtocolCommandId expectedCommandId)
         {
-            Either<IncomingCommand, ShutdownEventArgs> result = m_cell.WaitForValue(timeout);
-            if (result.Alternative == EitherAlternative.Left)
+            _expectedCommandId = expectedCommandId;
+        }
+
+        public override void HandleCommand(in IncomingCommand cmd)
+        {
+            try
             {
-                return;
+                if (cmd.CommandId == _expectedCommandId)
+                {
+                    _tcs.TrySetResult(true);
+                }
+                else
+                {
+                    _tcs.SetException(new InvalidOperationException($"Received unexpected command of type {cmd.CommandId}!"));
+                }
             }
-            ThrowOperationInterruptedException(result.RightValue);
-        }
-
-        public void GetReply(TimeSpan timeout, out IncomingCommand reply)
-        {
-            Either<IncomingCommand, ShutdownEventArgs> result = m_cell.WaitForValue(timeout);
-            if (result.Alternative == EitherAlternative.Left)
+            finally
             {
-                reply = result.LeftValue;
-                return;
+                cmd.ReturnMethodBuffer();
             }
-
-            reply = IncomingCommand.Empty;
-            ThrowOperationInterruptedException(result.RightValue);
         }
+    }
 
-        private static void ThrowOperationInterruptedException(ShutdownEventArgs shutdownEventArgs)
-            => throw new OperationInterruptedException(shutdownEventArgs);
-
-        public void HandleCommand(in IncomingCommand cmd)
+    internal class ExchangeDeclareAsyncRpcContinuation : SimpleAsyncRpcContinuation
+    {
+        public ExchangeDeclareAsyncRpcContinuation() : base(ProtocolCommandId.ExchangeDeclareOk)
         {
-            m_cell.ContinueWithValue(Either<IncomingCommand, ShutdownEventArgs>.Left(cmd));
         }
+    }
 
-        public void HandleChannelShutdown(ShutdownEventArgs reason)
+    internal class ExchangeDeleteAsyncRpcContinuation : SimpleAsyncRpcContinuation
+    {
+        public ExchangeDeleteAsyncRpcContinuation() : base(ProtocolCommandId.ExchangeDeleteOk)
         {
-            m_cell.ContinueWithValue(Either<IncomingCommand, ShutdownEventArgs>.Right(reason));
+        }
+    }
+
+    internal class QueueDeclareAsyncRpcContinuation : AsyncRpcContinuation<QueueDeclareOk>
+    {
+        public override void HandleCommand(in IncomingCommand cmd)
+        {
+            try
+            {
+                var method = new Client.Framing.Impl.QueueDeclareOk(cmd.MethodBytes.Span);
+                var result = new QueueDeclareOk(method._queue, method._messageCount, method._consumerCount);
+                if (cmd.CommandId == ProtocolCommandId.QueueDeclareOk)
+                {
+                    _tcs.TrySetResult(result);
+                }
+                else
+                {
+                    _tcs.SetException(new InvalidOperationException($"Received unexpected command of type {cmd.CommandId}!"));
+                }
+            }
+            finally
+            {
+                cmd.ReturnMethodBuffer();
+            }
+        }
+    }
+
+    internal class QueueDeleteAsyncRpcContinuation : AsyncRpcContinuation<QueueDeleteOk>
+    {
+        public override void HandleCommand(in IncomingCommand cmd)
+        {
+            try
+            {
+                var result = new Client.Framing.Impl.QueueDeleteOk(cmd.MethodBytes.Span);
+                if (cmd.CommandId == ProtocolCommandId.QueueDeleteOk)
+                {
+                    _tcs.TrySetResult(result);
+                }
+                else
+                {
+                    _tcs.SetException(new InvalidOperationException($"Received unexpected command of type {cmd.CommandId}!"));
+                }
+            }
+            finally
+            {
+                cmd.ReturnMethodBuffer();
+            }
         }
     }
 }
