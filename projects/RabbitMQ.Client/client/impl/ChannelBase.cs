@@ -199,6 +199,7 @@ namespace RabbitMQ.Client.Impl
 
         private async Task CloseAsync(ShutdownEventArgs reason, bool abort)
         {
+            // TODO LRB #1347 use async continuation
             var k = new ShutdownContinuation();
             ChannelShutdown += k.OnConnectionShutdown;
 
@@ -247,7 +248,7 @@ namespace RabbitMQ.Client.Impl
 
         internal async ValueTask<ConnectionSecureOrTune> ConnectionSecureOkAsync(byte[] response)
         {
-            var k = new ConnectionSecureOrTuneContinuation();
+            using var k = new ConnectionSecureOrTuneContinuation(ContinuationTimeout);
             await _rpcSemaphore.WaitAsync().ConfigureAwait(false);
             Enqueue(k);
             try
@@ -274,7 +275,7 @@ namespace RabbitMQ.Client.Impl
         internal async ValueTask<ConnectionSecureOrTune> ConnectionStartOkAsync(IDictionary<string, object> clientProperties, string mechanism, byte[] response,
             string locale)
         {
-            var k = new ConnectionSecureOrTuneContinuation();
+            using var k = new ConnectionSecureOrTuneContinuation(ContinuationTimeout);
             await _rpcSemaphore.WaitAsync().ConfigureAwait(false);
             Enqueue(k);
             try
@@ -486,6 +487,7 @@ namespace RabbitMQ.Client.Impl
             {
                 // dispose managed resources
                 this.Abort();
+                _rpcSemaphore.Dispose();
             }
 
             // dispose unmanaged resources
@@ -756,7 +758,7 @@ namespace RabbitMQ.Client.Impl
 
         protected void HandleConnectionSecure(in IncomingCommand cmd)
         {
-            var k = (ConnectionSecureOrTuneContinuation)_continuationQueue.Next();
+            using var k = (ConnectionSecureOrTuneContinuation)_continuationQueue.Next();
             k.HandleCommand(IncomingCommand.Empty); // release the continuation.
         }
 
@@ -784,7 +786,7 @@ namespace RabbitMQ.Client.Impl
 
         protected void HandleConnectionTune(in IncomingCommand cmd)
         {
-            var k = (ConnectionSecureOrTuneContinuation)_continuationQueue.Next();
+            using var k = (ConnectionSecureOrTuneContinuation)_continuationQueue.Next();
             k.HandleCommand(cmd); // release the continuation.
         }
 
@@ -1255,7 +1257,7 @@ namespace RabbitMQ.Client.Impl
 
         private async ValueTask DoExchangeDeclareAsync(string exchange, string type, bool passive, bool durable, bool autoDelete, IDictionary<string, object> arguments)
         {
-            var k = new ExchangeDeclareAsyncRpcContinuation();
+            using var k = new ExchangeDeclareAsyncRpcContinuation(ContinuationTimeout);
             await _rpcSemaphore.WaitAsync().ConfigureAwait(false);
             try
             {
@@ -1276,7 +1278,7 @@ namespace RabbitMQ.Client.Impl
 
         private async ValueTask DoExchangeDeleteAsync(string exchange, bool ifUnused)
         {
-            var k = new ExchangeDeleteAsyncRpcContinuation();
+            using var k = new ExchangeDeleteAsyncRpcContinuation(ContinuationTimeout);
             await _rpcSemaphore.WaitAsync().ConfigureAwait(false);
             try
             {
@@ -1318,7 +1320,7 @@ namespace RabbitMQ.Client.Impl
 
         private async ValueTask<QueueDeclareOk> DoQueueDeclareAsync(string queue, bool passive, bool durable, bool exclusive, bool autoDelete, IDictionary<string, object> arguments)
         {
-            var k = new QueueDeclareAsyncRpcContinuation();
+            using var k = new QueueDeclareAsyncRpcContinuation(ContinuationTimeout);
             await _rpcSemaphore.WaitAsync().ConfigureAwait(false);
             try
             {
@@ -1339,7 +1341,7 @@ namespace RabbitMQ.Client.Impl
 
         private async ValueTask<uint> DoQueueDeleteAsync(string queue, bool ifUnused, bool ifEmpty)
         {
-            var k = new QueueDeleteAsyncRpcContinuation();
+            using var k = new QueueDeleteAsyncRpcContinuation(ContinuationTimeout);
             await _rpcSemaphore.WaitAsync().ConfigureAwait(false);
             try
             {

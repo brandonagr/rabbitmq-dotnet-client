@@ -31,6 +31,7 @@
 
 using System;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using RabbitMQ.Client.client.framing;
 using RabbitMQ.Client.Exceptions;
@@ -38,19 +39,62 @@ using RabbitMQ.Client.Framing.Impl;
 
 namespace RabbitMQ.Client.Impl
 {
-    internal abstract class AsyncRpcContinuation<T> : IRpcContinuation
+    internal abstract class AsyncRpcContinuation<T> : IRpcContinuation, IDisposable
     {
+        private readonly CancellationTokenSource _ct;
+
         protected readonly TaskCompletionSource<T> _tcs = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        private bool _disposedValue;
+
+        public AsyncRpcContinuation(TimeSpan continuationTimeout)
+        {
+            _ct = new CancellationTokenSource(continuationTimeout);
+            _ct.Token.Register(() =>
+            {
+                if (_tcs.TrySetCanceled())
+                {
+                    // TODO LRB #1347
+                    // Cancellation was successful, does this mean we should set a TimeoutException
+                    // in the same manner as BlockingCell?
+                }
+            }, useSynchronizationContext: false);
+        }
 
         public TaskAwaiter<T> GetAwaiter() => _tcs.Task.GetAwaiter();
 
+        // TODO LRB #1347
+        // What to do if setting a result fails?
         public abstract void HandleCommand(in IncomingCommand cmd);
 
         public void HandleChannelShutdown(ShutdownEventArgs reason) => _tcs.SetException(new OperationInterruptedException(reason));
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposedValue)
+            {
+                if (disposing)
+                {
+                    _ct.Dispose();
+                }
+
+                _disposedValue = true;
+            }
+        }
+
+        public void Dispose()
+        {
+            Dispose(disposing: true);
+            GC.SuppressFinalize(this);
+        }
     }
 
     internal class ConnectionSecureOrTuneContinuation : AsyncRpcContinuation<ConnectionSecureOrTune>
     {
+        public ConnectionSecureOrTuneContinuation(TimeSpan continuationTimeout) : base(continuationTimeout)
+        {
+        }
+
         public override void HandleCommand(in IncomingCommand cmd)
         {
             try
@@ -63,6 +107,8 @@ namespace RabbitMQ.Client.Impl
                 else if (cmd.CommandId == ProtocolCommandId.ConnectionTune)
                 {
                     var tune = new ConnectionTune(cmd.MethodBytes.Span);
+                    // TODO LRB #1347
+                    // What to do if setting a result fails?
                     _tcs.TrySetResult(new ConnectionSecureOrTune
                     {
                         m_tuneDetails = new() { m_channelMax = tune._channelMax, m_frameMax = tune._frameMax, m_heartbeatInSeconds = tune._heartbeat }
@@ -84,7 +130,7 @@ namespace RabbitMQ.Client.Impl
     {
         private readonly ProtocolCommandId _expectedCommandId;
 
-        public SimpleAsyncRpcContinuation(ProtocolCommandId expectedCommandId)
+        public SimpleAsyncRpcContinuation(ProtocolCommandId expectedCommandId, TimeSpan continuationTimeout) : base(continuationTimeout)
         {
             _expectedCommandId = expectedCommandId;
         }
@@ -111,20 +157,24 @@ namespace RabbitMQ.Client.Impl
 
     internal class ExchangeDeclareAsyncRpcContinuation : SimpleAsyncRpcContinuation
     {
-        public ExchangeDeclareAsyncRpcContinuation() : base(ProtocolCommandId.ExchangeDeclareOk)
+        public ExchangeDeclareAsyncRpcContinuation(TimeSpan continuationTimeout) : base(ProtocolCommandId.ExchangeDeclareOk, continuationTimeout)
         {
         }
     }
 
     internal class ExchangeDeleteAsyncRpcContinuation : SimpleAsyncRpcContinuation
     {
-        public ExchangeDeleteAsyncRpcContinuation() : base(ProtocolCommandId.ExchangeDeleteOk)
+        public ExchangeDeleteAsyncRpcContinuation(TimeSpan continuationTimeout) : base(ProtocolCommandId.ExchangeDeleteOk, continuationTimeout)
         {
         }
     }
 
     internal class QueueDeclareAsyncRpcContinuation : AsyncRpcContinuation<QueueDeclareOk>
     {
+        public QueueDeclareAsyncRpcContinuation(TimeSpan continuationTimeout) : base(continuationTimeout)
+        {
+        }
+
         public override void HandleCommand(in IncomingCommand cmd)
         {
             try
@@ -149,6 +199,10 @@ namespace RabbitMQ.Client.Impl
 
     internal class QueueDeleteAsyncRpcContinuation : AsyncRpcContinuation<QueueDeleteOk>
     {
+        public QueueDeleteAsyncRpcContinuation(TimeSpan continuationTimeout) : base(continuationTimeout)
+        {
+        }
+
         public override void HandleCommand(in IncomingCommand cmd)
         {
             try
